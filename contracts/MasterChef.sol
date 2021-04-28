@@ -265,6 +265,8 @@ contract MasterChef is Ownable {
 
         if(_amount > 0) {
             user.amount = user.amount.sub(_amount);
+            user.rewardDebt = user.amount.mul(pool.accBuniPerShare).div(1e12);
+
             if (block.timestamp < user.lastDeposit.add(penaltyTime)) {
                 withdrawFee = getWithdrawFee(_amount);
             }
@@ -274,9 +276,10 @@ contract MasterChef is Ownable {
             if (withdrawFee > 0) {
                 pool.lpToken.safeTransfer(address(devaddr), withdrawFee);
             }
+        } else {
+            user.rewardDebt = user.amount.mul(pool.accBuniPerShare).div(1e12);
         }
 
-        user.rewardDebt = user.amount.mul(pool.accBuniPerShare).div(1e12);
         emit Withdraw(msg.sender, _pid, _amount);
     }
 
@@ -291,12 +294,13 @@ contract MasterChef is Ownable {
 
         uint256 totalHarvest = pending.add(unclaimedBuniValue);
 
+        user.rewardDebt = user.amount.mul(pool.accBuniPerShare).div(1e12);
+        
         if (totalHarvest > 0) {
             unclaimedBuni[_pid][msg.sender] = 0;
             mintVestingBuni(_pid, totalHarvest);
         }
 
-        user.rewardDebt = user.amount.mul(pool.accBuniPerShare).div(1e12);
         emit Harvest(msg.sender, _pid, totalHarvest);
     }
 

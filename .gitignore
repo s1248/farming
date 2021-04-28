@@ -1,0 +1,7 @@
+node_modules
+/artifacts/
+/build/
+.secret
+/cache/
+package-lock.json
+/data
