@@ -15,12 +15,12 @@ async function main() {
   // await hre.run('compile');
 
   // We get the contract to deploy
-  const TokenFactory = await hre.ethers.getContractFactory('VBuni');
+  const TokenFactory = await hre.ethers.getContractFactory('VBuniToken');
   const vBuni = await TokenFactory.deploy();
 
   await vBuni.deployed();
 
-  console.log('VBuni deployed to:', vBuni.address);
+  console.log('VBuniToken deployed to:', vBuni.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

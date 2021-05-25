@@ -8,7 +8,6 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721Burnable.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721Pausable.sol";
 
-
 /**
  * @dev {ERC721} token, including:
  *
@@ -52,6 +51,8 @@ contract VBuniToken is Context, AccessControl, ERC721Burnable, ERC721Pausable {
 
         _setupRole(MINTER_ROLE, _msgSender());
         _setupRole(PAUSER_ROLE, _msgSender());
+
+        _setBaseURI("https://nft.buni.finance/tokens/");
     }
 
     function getTokenInfo(uint256 tokenId) public view returns (uint256, uint256, uint256) {

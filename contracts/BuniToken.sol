@@ -4,17 +4,53 @@ import "@pancakeswap/pancake-swap-lib/contracts/token/BEP20/BEP20.sol";
 
 // BuniToken with Governance.
 contract BuniToken is BEP20('Buni Token', 'BUNI') {
+    uint256 private _cap = 1e27;
+
+    mapping (address => bool) public minters;
+
+    modifier onlyMinters() {
+      require(minters[msg.sender], "Only minter can mint");
+      _;
+    }
+
+    event AddMinter(address minter);
+    event RevokeMinter(address minter);
+
+    constructor () public {
+        addMinter(msg.sender);
+    }
+
+    /**
+     * @dev Returns the cap on the token's total supply.
+     */
+    function cap() public view virtual returns (uint256) {
+        return _cap;
+    }
+
+    /**
+     * @notice Only minters can mint tokens
+     * @dev Add new minter role - able to mint token
+     */
+    function addMinter(address _minter) public onlyOwner {
+        minters[_minter] = true;
+        emit AddMinter(_minter);
+    }
+
+    /**
+     * @notice Only minters can mint tokens
+     * @dev Revoke minter role - unable to mint token
+     */
+    function revokeMinter(address _minter) public onlyOwner {
+        minters[_minter] = false;
+        emit RevokeMinter(_minter);
+    }
+    
     /// @notice Creates `_amount` token to `_to`. Must only be called by the owner (MasterChef).
-    function mint(address _to, uint256 _amount) public onlyOwner {
+    function mint(address _to, uint256 _amount) public onlyMinters {
+        require(totalSupply().add(_amount) <= cap(), "ERC20Capped: cap exceeded");
         _mint(_to, _amount);
         _moveDelegates(address(0), _delegates[_to], _amount);
     }
-
-    // Copied and modified from YAM code:
-    // https://github.com/yam-finance/yam-protocol/blob/master/contracts/token/YAMGovernanceStorage.sol
-    // https://github.com/yam-finance/yam-protocol/blob/master/contracts/token/YAMGovernance.sol
-    // Which is copied and modified from COMPOUND:
-    // https://github.com/compound-finance/compound-protocol/blob/master/contracts/Governance/Comp.sol
 
     /// @notice A record of each accounts delegate
     mapping (address => address) internal _delegates;

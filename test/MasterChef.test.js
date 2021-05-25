@@ -12,7 +12,7 @@ describe('MasterChef', () => {
   let masterChef;
   let buni, vBuni;
   beforeEach(async () => {
-    const buniPerBlock = '40000000000000000000';
+    const buniPerBlock = '10000000000000000000';
     const startBlock = 0;
 
     [owner, user1, user2] = await ethers.getSigners();
@@ -53,7 +53,8 @@ describe('MasterChef', () => {
 
     // 1. Transfer Ownership to address
     await Promise.all([
-      await buni.transferOwnership(masterChef.address),
+      await buni.addMinter(masterChef.address),
+      await masterChef.setTimeLock(100),
       await vBuni.grantRole('0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6', masterChef.address),
     ]);
 
@@ -104,7 +105,7 @@ describe('MasterChef', () => {
 
     const afterRedeemBalance = await buni.balanceOf(user1.address);
 
-    expect(afterRedeemBalance).to.gt(balance)
+    expect(afterRedeemBalance).to.gt(balance);
   })
 
 
@@ -202,6 +203,95 @@ describe('MasterChef', () => {
     const withdrawFee = await masterChef.getWithdrawFee(1000000);
 
     expect(withdrawFee).to.equal((1000000 * 0.01).toFixed());
+  })
+
+  it('should return correct value when mint', async () => {
+    const buniPerBlock = '40000000000000000000000000';
+    const startBlock = 0;
+
+    [owner, user1, user2] = await ethers.getSigners();
+
+    // We get the contract to deploy
+
+    // I. Deploy BUNI & vBUNI Token
+
+    // BUNI
+    const BuniToken = await hre.ethers.getContractFactory('BuniToken');
+    buni = await BuniToken.deploy();
+
+    await buni.deployed();
+
+    // vBUNI
+    const VBuniToken = await hre.ethers.getContractFactory('VBuniToken');
+    const vBuni = await VBuniToken.deploy();
+  
+    await vBuni.deployed();
+
+    // II. Deploy Masterchef
+    const MasterChef = await hre.ethers.getContractFactory('MasterChef');
+    const masterChef = await MasterChef.deploy(buni.address, vBuni.address, owner.address, buniPerBlock, startBlock);
+
+    await masterChef.deployed();
+
+    // III. Deploy test LP
+    const MockBEP20 = await hre.ethers.getContractFactory('MockBEP20');
+    const lp1 = await MockBEP20.deploy('Buni LPs', 'Buni-LP', ethers.utils.parseUnits('10000000', 18));
+    const lp2 = await MockBEP20.deploy('Buni LPs', 'Buni-LP', ethers.utils.parseUnits('10000000', 18));
+
+    await lp1.deployed();
+    await lp2.deployed();
+
+    // IV. Setup Masterchef
+
+    // 1. Transfer Ownership to address
+    await Promise.all([
+      await buni.addMinter(masterChef.address),
+      await masterChef.setTimeLock(0),
+      await vBuni.grantRole('0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6', masterChef.address),
+    ]);
+
+    // 2. Transfer LP tokens
+    await Promise.all([
+      lp1.transfer(user1.address, ethers.utils.parseUnits('10000', 18)),
+      lp2.transfer(user1.address, ethers.utils.parseUnits('10000', 18)),
+    ]);
+
+    await masterChef.add('50', lp1.address, true);
+    await masterChef.add('100', lp2.address, true);
+
+    await lp1.connect(user1).approve(masterChef.address, ethers.utils.parseUnits('1000000', 18));
+    await lp2.connect(user1).approve(masterChef.address, ethers.utils.parseUnits('1000000', 18));
+
+    await masterChef.connect(user1).deposit(0, ethers.utils.parseUnits('100', 18));
+    await masterChef.connect(user1).deposit(1, ethers.utils.parseUnits('100', 18));
+    await masterChef.connect(user1).withdraw(0, ethers.utils.parseUnits('1', 18));
+    
+    await time.advanceBlockTo(await getCurrentBlock() + 20);
+    await masterChef.connect(user1).withdraw(0, ethers.utils.parseUnits('1', 18));
+
+    await time.advanceBlockTo(await getCurrentBlock() + 20);
+    await masterChef.connect(user1).withdraw(0, ethers.utils.parseUnits('1', 18));
+
+    await time.advanceBlockTo(await getCurrentBlock() + 20);
+    await masterChef.connect(user1).withdraw(0, ethers.utils.parseUnits('1', 18));
+
+    await time.advanceBlockTo(await getCurrentBlock() + 5);
+    await masterChef.connect(user1).withdraw(0, ethers.utils.parseUnits('1', 18));
+
+    await time.advanceBlockTo(await getCurrentBlock() + 5);
+    await masterChef.connect(user1).withdraw(0, ethers.utils.parseUnits('1', 18));
+
+    await time.advanceBlockTo(await getCurrentBlock() + 5);
+    await masterChef.connect(user1).withdraw(0, ethers.utils.parseUnits('1', 18));
+
+    await vBuni.connect(user1).setApprovalForAll(masterChef.address, true);
+
+    time.advanceBlockTo(await getCurrentBlock() + 100);
+
+    await masterChef.connect(user1).redeemBatchBuni([0, 1, 2, 3, 4, 5, 6]);
+
+    console.log("Total Supply", await buni.totalSupply());
+    expect(await masterChef.totalMint()).to.equal(ethers.utils.parseUnits('200000000', 18));
   })
 
   async function getCurrentBlock() {

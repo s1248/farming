@@ -59,6 +59,10 @@ contract MasterChef is Ownable {
     uint256 public buniPerBlock;
     // Bonus muliplier for early buni makers.
     uint256 public BONUS_MULTIPLIER = 1;
+    // Max mint
+    uint256 public MAX_MINT = 2e26;
+    // Total mint
+    uint256 public totalMint = 0;
     // The migrator contract. It has a lot of power. Can only be set through governance (owner).
     IMigratorChef public migrator;
 
@@ -157,6 +161,17 @@ contract MasterChef is Ownable {
         migrator = _migrator;
     }
 
+    // Set max mint value. Can only be called by the owner.
+    function setMaxMint(uint256 _maxMint) public onlyOwner {
+        MAX_MINT = _maxMint;
+    }
+
+    // Set withdraw penalty value. Can only be called by the owner.
+    function setPenaltyFee(uint256 _newPenalty) public onlyOwner {
+        require(_newPenalty < 1000, "Overflow Penalty");
+        platformFeeRate = _newPenalty;
+    }
+
     // Set the time lock of buni. Can only be called by the owner.
     // User can claim token after expired vest time lock
     function setTimeLock(uint256 _lockedIn) public onlyOwner {
@@ -192,6 +207,9 @@ contract MasterChef is Ownable {
         UserInfo storage user = userInfo[_pid][_user];
         uint256 accBuniPerShare = pool.accBuniPerShare;
         uint256 lpSupply = pool.lpToken.balanceOf(address(this));
+        if (totalMint >= MAX_MINT) {
+            return 0;
+        }
         if (block.number > pool.lastRewardBlock && lpSupply != 0) {
             uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
             uint256 buniReward = multiplier.mul(buniPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
@@ -335,6 +353,14 @@ contract MasterChef is Ownable {
     }
 
     function mintVestingBuni(uint256 _pid, uint256 _amount) internal {
+        if (totalMint.add(_amount) >= MAX_MINT) {
+          _amount = MAX_MINT.sub(totalMint);
+        }
+
+        if (_amount > 0) {
+          totalMint = totalMint.add(_amount);
+        }
+
         IERC721(vBuni).mint(msg.sender, _pid, _amount, block.timestamp.add(vestTimeLock));
 
         emit Vesting(msg.sender, _pid, _amount, block.timestamp.add(vestTimeLock));
