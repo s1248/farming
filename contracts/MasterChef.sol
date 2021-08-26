@@ -55,12 +55,14 @@ contract MasterChef is Ownable {
     IERC721 public vBuni;
     // Dev address.
     address public devaddr;
+    // Dev address.
+    address public treasury;
     // Buni tokens created per block.
     uint256 public buniPerBlock;
     // Bonus muliplier for early buni makers.
     uint256 public BONUS_MULTIPLIER = 1;
     // Max mint
-    uint256 public MAX_MINT = 2e26;
+    uint256 public MAX_MINT = 6000000 * 10 ** 18;
     // Total mint
     uint256 public totalMint = 0;
     // The migrator contract. It has a lot of power. Can only be set through governance (owner).
@@ -75,7 +77,7 @@ contract MasterChef is Ownable {
     // The block number when Buni mining starts.
     uint256 public startBlock;
     // Withdraw fee
-    uint256 public platformFeeRate = 10;
+    uint256 public platformFeeRate = 0;
     // Withdraw decimals
     uint256 public withdrawDecimals = 3;
     // Vest time lock
@@ -89,20 +91,33 @@ contract MasterChef is Ownable {
     event Withdraw(address indexed user, uint256 indexed pid, uint256 amount);
     event Harvest(address indexed user, uint256 indexed pid, uint256 amount);
     event Vesting(address indexed user, uint256 indexed pid, uint256 amount, uint256 endInvestAt);
-    event EmergencyWithdraw(address indexed user, uint256 indexed pid, uint256 amount);
+    event EmergencyRedeem(address indexed user, uint256 indexed pid, uint256 amount);
+    event Redeem(address indexed user, uint256 indexed pid, uint256 amount);
 
     constructor(
         BuniToken _buni,
         IERC721 _vBuni,
         address _devaddr,
+        address _treasury,
         uint256 _buniPerBlock,
         uint256 _startBlock
     ) public {
         buni = _buni;
         vBuni = _vBuni;
         devaddr = _devaddr;
+        treasury = _treasury;
         buniPerBlock = _buniPerBlock;
         startBlock = _startBlock;
+
+      // Buni staking pool
+        poolInfo.push(PoolInfo({
+            lpToken: _buni,
+            allocPoint: 5,
+            lastRewardBlock: startBlock,
+            accBuniPerShare: 0
+        }));
+
+        totalAllocPoint = 5;
     }
 
     function updateMultiplier(uint256 multiplierNumber) public onlyOwner {
@@ -143,6 +158,18 @@ contract MasterChef is Ownable {
         }
     }
 
+    // Update the given pool's Buni allocation point. Can only be called by the owner.
+    function emergencySet(uint256 _pid, uint256 _allocPoint, bool _withUpdate) public onlyOwner {
+        if (_withUpdate) {
+            massUpdatePools();
+        }
+        uint256 prevAllocPoint = poolInfo[_pid].allocPoint;
+        poolInfo[_pid].allocPoint = _allocPoint;
+        if (prevAllocPoint != _allocPoint) {
+            totalAllocPoint = totalAllocPoint.sub(prevAllocPoint).add(_allocPoint);
+        }
+    }
+
     function updateStakingPool() internal {
         uint256 length = poolInfo.length;
         uint256 points = 0;
@@ -150,7 +177,7 @@ contract MasterChef is Ownable {
             points = points.add(poolInfo[pid].allocPoint);
         }
         if (points != 0) {
-            points = points.div(3);
+            points = points.div(10);
             totalAllocPoint = totalAllocPoint.sub(poolInfo[0].allocPoint).add(points);
             poolInfo[0].allocPoint = points;
         }
@@ -207,9 +234,6 @@ contract MasterChef is Ownable {
         UserInfo storage user = userInfo[_pid][_user];
         uint256 accBuniPerShare = pool.accBuniPerShare;
         uint256 lpSupply = pool.lpToken.balanceOf(address(this));
-        if (totalMint >= MAX_MINT) {
-            return 0;
-        }
         if (block.number > pool.lastRewardBlock && lpSupply != 0) {
             uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
             uint256 buniReward = multiplier.mul(buniPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
@@ -226,6 +250,11 @@ contract MasterChef is Ownable {
         }
     }
 
+    // Update Buni Per Block
+    function setBuniPerBlock(uint256 _buniPerBlock) external onlyOwner {
+        massUpdatePools();
+        buniPerBlock = _buniPerBlock;
+    }
 
     // Update reward variables of the given pool to be up-to-date.
     function updatePool(uint256 _pid) public {
@@ -328,20 +357,57 @@ contract MasterChef is Ownable {
         devaddr = _devaddr;
     }
 
+    // Update dev address by the previous dev.
+    function setTreasury(address _treasury) public onlyOwner {
+        treasury = _treasury;
+    }
+
     // Get Withdraw fee
     function getWithdrawFee(uint256 _amount) public view returns(uint256) {
         return _amount.mul(platformFeeRate).div(10 ** withdrawDecimals);
+    }
+
+    function emergencyRedeemBuni(uint256 _tokenId) public {
+        uint256 pid;
+        uint256 amount;
+        uint256 vestedAt;
+        uint256 createdAt;
+
+        (pid, amount, vestedAt, createdAt) = IERC721(vBuni).getTokenInfo(_tokenId);
+        
+        uint256 claimAble = amount;
+        uint256 burnAmount = 0;
+
+        if (block.timestamp < vestedAt) {
+            uint256 vestedIn = vestedAt.sub(createdAt);
+            uint256 buniPerSecond = amount.div(vestedIn);
+            uint256 currentClaim = block.timestamp.sub(createdAt) * buniPerSecond;
+
+            uint256 penaltyAmount = amount.sub(currentClaim).div(2);
+            burnAmount = penaltyAmount;
+            claimAble = currentClaim.add(penaltyAmount);
+        }
+
+        IERC721(vBuni).transferFrom(msg.sender, address(this), _tokenId);
+        IERC721(vBuni).burn(_tokenId);
+
+        require(claimAble <= amount, "withdraw not good");
+        buni.mint(msg.sender, claimAble);
+        buni.mint(treasury, burnAmount);
+
+        emit EmergencyRedeem(msg.sender, pid, amount);
     }
 
     function redeemBuni(uint256 _tokenId) public {
         uint256 pid;
         uint256 amount;
         uint256 vestedAt;
-        (pid, amount, vestedAt) = IERC721(vBuni).getTokenInfo(_tokenId);
+        (pid, amount, vestedAt, ) = IERC721(vBuni).getTokenInfo(_tokenId);
         require(block.timestamp >= vestedAt, "token are vesting");
         IERC721(vBuni).transferFrom(msg.sender, address(this), _tokenId);
         IERC721(vBuni).burn(_tokenId);
 
+        Redeem(msg.sender, pid, amount);
         buni.mint(msg.sender, amount);
     }
 
@@ -353,13 +419,9 @@ contract MasterChef is Ownable {
     }
 
     function mintVestingBuni(uint256 _pid, uint256 _amount) internal {
-        if (totalMint.add(_amount) >= MAX_MINT) {
-          _amount = MAX_MINT.sub(totalMint);
-        }
+        require(totalMint.add(_amount) <= MAX_MINT, "max mint exceeded");
 
-        if (_amount > 0) {
-          totalMint = totalMint.add(_amount);
-        }
+        totalMint = totalMint.add(_amount);
 
         IERC721(vBuni).mint(msg.sender, _pid, _amount, block.timestamp.add(vestTimeLock));
 

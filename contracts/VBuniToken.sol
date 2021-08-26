@@ -33,6 +33,7 @@ contract VBuniToken is Context, AccessControl, ERC721Burnable, ERC721Pausable {
         uint256 pid;
         uint256 amount;
         uint256 vestedAt;
+        uint256 createdAt;
     }
 
     mapping(uint256 => TokenInfo) public vestedData;
@@ -55,10 +56,10 @@ contract VBuniToken is Context, AccessControl, ERC721Burnable, ERC721Pausable {
         _setBaseURI("https://nft.buni.finance/tokens/");
     }
 
-    function getTokenInfo(uint256 tokenId) public view returns (uint256, uint256, uint256) {
+    function getTokenInfo(uint256 tokenId) public view returns (uint256, uint256, uint256, uint256) {
         TokenInfo memory info = vestedData[tokenId];
 
-        return (info.pid, info.amount, info.vestedAt);
+        return (info.pid, info.amount, info.vestedAt, info.createdAt);
     }
 
     /**
@@ -81,7 +82,8 @@ contract VBuniToken is Context, AccessControl, ERC721Burnable, ERC721Pausable {
         vestedData[_tokenIdTracker.current()] = TokenInfo({
             pid: poolId,
             amount: buniAmount,
-            vestedAt: vestedTimestamp
+            vestedAt: vestedTimestamp,
+            createdAt: block.timestamp
         });
         _tokenIdTracker.increment();
     }
@@ -125,7 +127,7 @@ contract VBuniToken is Context, AccessControl, ERC721Burnable, ERC721Pausable {
 
     function getTokenInfoOfOwnerByIndex(address owner, uint256 index) public view returns(uint256 poolId, uint256 amount, uint256 vestedAt, uint256 tokenId) {
         uint256 tokenId = tokenOfOwnerByIndex(owner, index);
-        (poolId, amount, vestedAt) = getTokenInfo(tokenId);
+        (poolId, amount, vestedAt, ) = getTokenInfo(tokenId);
         return (poolId, amount, vestedAt, tokenId);
     }
 }

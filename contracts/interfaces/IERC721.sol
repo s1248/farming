@@ -134,7 +134,7 @@ interface IERC721 is IERC165 {
       *
       * - `tokenId` token must exist.
       */
-    function getTokenInfo(uint256 tokenId) external view returns (uint256, uint256, uint256);
+    function getTokenInfo(uint256 tokenId) external view returns (uint256, uint256, uint256, uint256);
 
     /**
      * @dev Creates a new token for `to`. Its token ID will be automatically
