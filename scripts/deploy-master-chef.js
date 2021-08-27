@@ -9,8 +9,9 @@ const {
 } = hre;
 
 async function main() {
-  const owner = '0xba535ade958703Ffb99B9325ca8db04A00937029';
-  const buniPerBlock = '40000000000000000000';
+  const owner = '';
+  const treasury = '';
+  const buniPerBlock = '8680000000000000000';
   const startBlock = 700000;
   // Hardhat always runs the compile task when running scripts with its command
   // line interface.
@@ -39,7 +40,7 @@ async function main() {
 
   // III. Deploy Masterchef
   const MasterChef = await hre.ethers.getContractFactory('MasterChef');
-  const masterChef = await MasterChef.deploy(buni.address, vBuni.address, owner, buniPerBlock, startBlock);
+  const masterChef = await MasterChef.deploy(buni.address, vBuni.address, owner, treasury, buniPerBlock, startBlock);
 
   await masterChef.deployed();
 
@@ -68,8 +69,9 @@ async function main() {
 
   // Verify Contract
 
-  await verifyContract(masterChef.address, [buni.address, vBuni.address, owner, buniPerBlock, startBlock]);
+  await verifyContract(masterChef.address, [buni.address, vBuni.address, owner, treasury, buniPerBlock, startBlock]);
   await verifyContract(vBuni.address, []);
+  await verifyContract(buni.address, []);
   await verifyContract(mockBEP20.address, ['Buni LPs', 'Buni-LP', ethers.utils.parseUnits('10000000', 18)]);
 }
 
