@@ -62,7 +62,7 @@ contract MasterChef is Ownable {
     // Bonus muliplier for early buni makers.
     uint256 public BONUS_MULTIPLIER = 1;
     // Max mint
-    uint256 public MAX_MINT = 6000000 * 10 ** 18;
+    uint256 public MAX_MINT = 100000000 * 10 ** 18;
     // Total mint
     uint256 public totalMint = 0;
     // The migrator contract. It has a lot of power. Can only be set through governance (owner).
@@ -108,16 +108,6 @@ contract MasterChef is Ownable {
         treasury = _treasury;
         buniPerBlock = _buniPerBlock;
         startBlock = _startBlock;
-
-      // Buni staking pool
-        poolInfo.push(PoolInfo({
-            lpToken: _buni,
-            allocPoint: 5,
-            lastRewardBlock: startBlock,
-            accBuniPerShare: 0
-        }));
-
-        totalAllocPoint = 5;
     }
 
     function updateMultiplier(uint256 multiplierNumber) public onlyOwner {
@@ -142,7 +132,6 @@ contract MasterChef is Ownable {
             lastRewardBlock: lastRewardBlock,
             accBuniPerShare: 0
         }));
-        updateStakingPool();
     }
 
     // Update the given pool's Buni allocation point. Can only be called by the owner.
@@ -154,7 +143,6 @@ contract MasterChef is Ownable {
         poolInfo[_pid].allocPoint = _allocPoint;
         if (prevAllocPoint != _allocPoint) {
             totalAllocPoint = totalAllocPoint.sub(prevAllocPoint).add(_allocPoint);
-            updateStakingPool();
         }
     }
 
@@ -168,24 +156,6 @@ contract MasterChef is Ownable {
         if (prevAllocPoint != _allocPoint) {
             totalAllocPoint = totalAllocPoint.sub(prevAllocPoint).add(_allocPoint);
         }
-    }
-
-    function updateStakingPool() internal {
-        uint256 length = poolInfo.length;
-        uint256 points = 0;
-        for (uint256 pid = 1; pid < length; ++pid) {
-            points = points.add(poolInfo[pid].allocPoint);
-        }
-        if (points != 0) {
-            points = points.div(10);
-            totalAllocPoint = totalAllocPoint.sub(poolInfo[0].allocPoint).add(points);
-            poolInfo[0].allocPoint = points;
-        }
-    }
-
-    // Set the migrator contract. Can only be called by the owner.
-    function setMigrator(IMigratorChef _migrator) public onlyOwner {
-        migrator = _migrator;
     }
 
     // Set max mint value. Can only be called by the owner.
@@ -209,18 +179,6 @@ contract MasterChef is Ownable {
     // User can claim token within penalties must paid for the penalty's value
     function setPenaltyTime(uint256 _penaltyIn) public onlyOwner {
         penaltyTime = _penaltyIn;
-    }
-    
-    // Migrate lp token to another lp contract. Can be called by anyone. We trust that migrator contract is good.
-    function migrate(uint256 _pid) public {
-        require(address(migrator) != address(0), "migrate: no migrator");
-        PoolInfo storage pool = poolInfo[_pid];
-        IBEP20 lpToken = pool.lpToken;
-        uint256 bal = lpToken.balanceOf(address(this));
-        lpToken.safeApprove(address(migrator), bal);
-        IBEP20 newLpToken = migrator.migrate(lpToken);
-        require(bal == newLpToken.balanceOf(address(this)), "migrate: bad");
-        pool.lpToken = newLpToken;
     }
 
     // Return reward multiplier over the given _from to _to block.
@@ -303,12 +261,7 @@ contract MasterChef is Ownable {
         UserInfo storage user = userInfo[_pid][msg.sender];
         require(user.amount >= _amount, "withdraw: not good");
 
-        updatePool(_pid);
-        uint256 pending = user.amount.mul(pool.accBuniPerShare).div(1e12).sub(user.rewardDebt);
-
-        if(pending > 0) {
-            mintVestingBuni(_pid, pending);
-        }
+        harvest(_pid);
 
         if(_amount > 0) {
             user.amount = user.amount.sub(_amount);

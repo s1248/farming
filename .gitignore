@@ -3,5 +3,4 @@ node_modules
 /build/
 .secret
 /cache/
-package-lock.json
 /data

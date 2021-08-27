@@ -32,7 +32,7 @@ module.exports = {
       },
     },
   },
-  defaultNetwork: 'localhost',
+  defaultNetwork: "hardhat",
   networks: {
     localhost: {
       url: 'http://127.0.0.1:8545',
@@ -64,7 +64,7 @@ module.exports = {
     },
   },
   etherscan: {
-    apiKey: 'VU7SX55SS1NJ1S85HDKN1REWYZTRCC9ZGZ',
+    apiKey: '',
     bsc: '',
     ethers: ''
   },

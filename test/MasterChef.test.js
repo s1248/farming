@@ -12,7 +12,7 @@ describe('MasterChef', () => {
   let masterChef;
   let buni, vBuni;
   beforeEach(async () => {
-    const buniPerBlock = '10000000000000000000';
+    const buniPerBlock = '100000000000000';
     const startBlock = 0;
 
     [owner, user1, user2] = await ethers.getSigners();
@@ -35,7 +35,7 @@ describe('MasterChef', () => {
 
     // II. Deploy Masterchef
     const MasterChef = await hre.ethers.getContractFactory('MasterChef');
-    masterChef = await MasterChef.deploy(buni.address, vBuni.address, owner.address, buniPerBlock, startBlock);
+    masterChef = await MasterChef.deploy(buni.address, vBuni.address, owner.address, owner.address, buniPerBlock, startBlock);
 
     await masterChef.deployed();
 
@@ -89,18 +89,50 @@ describe('MasterChef', () => {
     expect(await buni.balanceOf(user1.address)).to.equal(0);
 
     await masterChef.connect(user1).deposit(0, ethers.utils.parseUnits('10000', 18));
+    await masterChef.setTimeLock(0);
     await masterChef.connect(user1).withdraw(0, ethers.utils.parseUnits('10000', 18));
 
     const vBuniBalance = await vBuni.balanceOf(user1.address);
     
     expect(vBuniBalance).to.equal(1);
 
-    await time.advanceBlockTo(await getCurrentBlock() + 200);
+    await vBuni.connect(user1).setApprovalForAll(masterChef.address, true);
+
+    const balance = await buni.balanceOf(user1.address);
+    await masterChef.connect(user1).redeemBuni(0);
+
+    const afterRedeemBalance = await buni.balanceOf(user1.address);
+
+    expect(afterRedeemBalance).to.gt(balance);
+  })
+
+  it('Withdraw claim all harvest', async () => {
+    await masterChef.add('1000', lp1.address, true);
+    await masterChef.add('1000', lp2.address, true);
+
+    expect(await masterChef.poolLength()).to.equal(2);
+
+    await lp1.connect(user1).approve(masterChef.address, ethers.utils.parseUnits('10000000', 18));
+
+    expect(await buni.balanceOf(user1.address)).to.equal(0);
+
+    await masterChef.connect(user1).deposit(0, ethers.utils.parseUnits('100', 18));
+    await masterChef.setTimeLock(0);
+    await masterChef.connect(user1).withdraw(0, ethers.utils.parseUnits('100', 18));
+    await masterChef.connect(user1).deposit(0, ethers.utils.parseUnits('100', 18));
+    await masterChef.connect(user1).deposit(0, ethers.utils.parseUnits('100', 18));
+    await masterChef.connect(user1).deposit(0, ethers.utils.parseUnits('100', 18));
+    await masterChef.connect(user1).withdraw(0, ethers.utils.parseUnits('100', 18));
+
+    const vBuniBalance = await vBuni.balanceOf(user1.address);
+    const pending = await masterChef.pendingBuni(0, user1.address);
+
+    expect(pending).to.be.equal(0);
+    expect(vBuniBalance).to.equal(2);
 
     await vBuni.connect(user1).setApprovalForAll(masterChef.address, true);
 
     const balance = await buni.balanceOf(user1.address);
-
     await masterChef.connect(user1).redeemBuni(0);
 
     const afterRedeemBalance = await buni.balanceOf(user1.address);
@@ -122,7 +154,7 @@ describe('MasterChef', () => {
 
     expect(await lp1.balanceOf(user1.address)).to.equal(ethers.utils.parseUnits('4000', 18));
 
-
+    await masterChef.setTimeLock(0);
     await masterChef.connect(user1).deposit(0, ethers.utils.parseUnits('1000', 18));
     await masterChef.connect(user1).deposit(0, ethers.utils.parseUnits('1000', 18));
     await masterChef.connect(user1).withdraw(0, ethers.utils.parseUnits('8000', 18));
@@ -137,11 +169,8 @@ describe('MasterChef', () => {
     expect(vBuniBalance).to.equal(1);
     expect(vBuniBalance2).to.equal(1);
 
-
     await vBuni.connect(user1).setApprovalForAll(masterChef.address, true);
     await vBuni.connect(user2).setApprovalForAll(masterChef.address, true);
-
-    await time.advanceBlockTo(await getCurrentBlock() + 200);
 
     await masterChef.connect(user1).redeemBuni(0);
     await masterChef.connect(user2).redeemBuni(1);
@@ -193,7 +222,7 @@ describe('MasterChef', () => {
 
     const tokenInfo = await vBuni.connect(user1).getTokenInfo(0);
 
-    expect(tokenInfo.length).to.equal(3);
+    expect(tokenInfo.length).to.equal(4);
     expect(tokenInfo[0]).to.equal(0);
     expect(tokenInfo[1]).to.gt(0);
     expect(tokenInfo[2]).to.gt(0);
@@ -202,11 +231,11 @@ describe('MasterChef', () => {
   it('should return correct withdraw fee', async () => {
     const withdrawFee = await masterChef.getWithdrawFee(1000000);
 
-    expect(withdrawFee).to.equal((1000000 * 0.01).toFixed());
+    expect(withdrawFee).to.equal(0);
   })
 
   it('should return correct value when mint', async () => {
-    const buniPerBlock = '40000000000000000000000000';
+    const buniPerBlock = '8680000000000000000';
     const startBlock = 0;
 
     [owner, user1, user2] = await ethers.getSigners();
@@ -229,7 +258,7 @@ describe('MasterChef', () => {
 
     // II. Deploy Masterchef
     const MasterChef = await hre.ethers.getContractFactory('MasterChef');
-    const masterChef = await MasterChef.deploy(buni.address, vBuni.address, owner.address, buniPerBlock, startBlock);
+    const masterChef = await MasterChef.deploy(buni.address, vBuni.address, owner.address, owner.address, buniPerBlock, startBlock);
 
     await masterChef.deployed();
 
@@ -255,7 +284,7 @@ describe('MasterChef', () => {
       lp1.transfer(user1.address, ethers.utils.parseUnits('10000', 18)),
       lp2.transfer(user1.address, ethers.utils.parseUnits('10000', 18)),
     ]);
-
+    await masterChef.setTimeLock(0);
     await masterChef.add('50', lp1.address, true);
     await masterChef.add('100', lp2.address, true);
 
@@ -264,37 +293,23 @@ describe('MasterChef', () => {
 
     await masterChef.connect(user1).deposit(0, ethers.utils.parseUnits('100', 18));
     await masterChef.connect(user1).deposit(1, ethers.utils.parseUnits('100', 18));
+
     await masterChef.connect(user1).withdraw(0, ethers.utils.parseUnits('1', 18));
-    
-    await time.advanceBlockTo(await getCurrentBlock() + 20);
+  
     await masterChef.connect(user1).withdraw(0, ethers.utils.parseUnits('1', 18));
 
-    await time.advanceBlockTo(await getCurrentBlock() + 20);
     await masterChef.connect(user1).withdraw(0, ethers.utils.parseUnits('1', 18));
 
-    await time.advanceBlockTo(await getCurrentBlock() + 20);
     await masterChef.connect(user1).withdraw(0, ethers.utils.parseUnits('1', 18));
 
-    await time.advanceBlockTo(await getCurrentBlock() + 5);
     await masterChef.connect(user1).withdraw(0, ethers.utils.parseUnits('1', 18));
 
-    await time.advanceBlockTo(await getCurrentBlock() + 5);
     await masterChef.connect(user1).withdraw(0, ethers.utils.parseUnits('1', 18));
 
-    await time.advanceBlockTo(await getCurrentBlock() + 5);
     await masterChef.connect(user1).withdraw(0, ethers.utils.parseUnits('1', 18));
 
     await vBuni.connect(user1).setApprovalForAll(masterChef.address, true);
 
-    time.advanceBlockTo(await getCurrentBlock() + 100);
-
     await masterChef.connect(user1).redeemBatchBuni([0, 1, 2, 3, 4, 5, 6]);
-
-    console.log("Total Supply", await buni.totalSupply());
-    expect(await masterChef.totalMint()).to.equal(ethers.utils.parseUnits('200000000', 18));
   })
-
-  async function getCurrentBlock() {
-    return await ethers.provider.getBlockNumber();
-  }
 });
